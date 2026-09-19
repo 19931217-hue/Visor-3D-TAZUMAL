@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visor 3D Interactivo - Tazumal (Moisés Díaz)</title>
+
+  <!-- Tailwind CSS & Font Awesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f19;
+      color: #f8fafc;
+    }
+
+    .font-cinzel {
+      font-family: 'Cinzel', serif;
+    }
+
+    #webgl-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* Glassmorphism Styling */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.7);
+    }
+
+    .glass-button {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-button:hover {
+      background: rgba(217, 119, 6, 0.35);
+      border-color: rgba(245, 158, 11, 0.7);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(245, 158, 11, 0.25);
+    }
+
+    .glass-button.active {
+      background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+      border-color: #fef08a;
+      color: #ffffff;
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5);
+      font-weight: 700;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #f59e0b;
+      border-radius: 3px;
+    }
+
+    /* Minimap Canvas */
+    #minimap {
+      border: 2px solid rgba(245, 158, 11, 0.6);
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.92);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL Render Container -->
+  <div id="webgl-container"></div>
+
+  <!-- Main UI Layer -->
+  <div class="relative z-10 w-full h-full pointer-events-none flex flex-col justify-between p-4 md:p-6">
+    
+    <!-- Top Bar Header -->
+    <header class="flex justify-between items-start pointer-events-auto">
+      <div class="glass-panel p-4 md:p-5 rounded-2xl max-w-xl border-l-4 border-l-amber-500">
+        <div class="flex items-center gap-3 mb-1">
+          <span class="bg-amber-500/20 text-amber-300 px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border border-amber-500/40">
+            SITIO ARQUEOLÓGICO MAYA / PIPIL
+          </span>
+          <span id="time-badge" class="text-xs text-slate-300 flex items-center gap-1 font-semibold">
+            <i class="fa-solid fa-sun text-amber-400"></i> Día Radiante
+          </span>
+        </div>
+        <h1 class="font-cinzel text-2xl md:text-3xl font-black text-amber-400 tracking-wide drop-shadow-md">
+          PARQUE ARQUEOLÓGICO TAZUMAL
+        </h1>
+        <p class="text-xs md:text-sm text-slate-200 mt-1 font-medium">
+          Chalchuapa, Santa Ana, El Salvador • Modelo 3D Interactivo
+        </p>
+      </div>
+
+      <!-- Quick Action Controls & Author Badge -->
+      <div class="flex flex-col items-end gap-2 pointer-events-auto">
+        <!-- Author Badge -->
+        <div class="glass-panel px-4 py-2 rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-500/20 to-amber-700/20 text-right">
+          <span class="text-[10px] text-amber-300/80 uppercase font-bold tracking-widest block">Desarrollado Por</span>
+          <span class="text-sm md:text-base font-extrabold text-white tracking-wide flex items-center gap-2">
+            <i class="fa-solid fa-graduation-cap text-amber-400"></i> Moisés Díaz - 1 SWA
+          </span>
+        </div>
+
+        <div class="flex gap-2">
+          <button id="audio-toggle" onclick="toggleAudio()" class="glass-button p-2.5 md:p-3 rounded-xl text-amber-400 flex items-center gap-2 text-xs md:text-sm font-semibold">
+            <i id="audio-icon" class="fa-solid fa-volume-xmark"></i>
+            <span class="hidden md:inline">Audio Ambiental</span>
+          </button>
+          <button onclick="toggleTour()" id="tour-btn" class="glass-button p-2.5 md:p-3 rounded-xl text-amber-400 flex items-center gap-2 text-xs md:text-sm font-semibold">
+            <i class="fa-solid fa-route"></i>
+            <span class="hidden md:inline">Tour Guiado</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Sidebar Info Panel -->
+    <div id="info-panel" class="absolute top-28 right-4 md:right-6 w-80 md:w-96 glass-panel rounded-2xl p-5 pointer-events-auto transition-all duration-500 max-h-[calc(100vh-200px)] overflow-y-auto">
+      
+      <!-- Panel Tabs -->
+      <div class="flex border-b border-slate-700/80 pb-3 mb-4 gap-2">
+        <button onclick="switchTab('info')" id="tab-info" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/40">
+          <i class="fa-solid fa-circle-info mr-1"></i> Historia
+        </button>
+        <button onclick="switchTab('guide')" id="tab-guide" class="text-xs font-bold px-3 py-1.5 rounded-lg text-slate-300 hover:text-white">
+          <i class="fa-solid fa-compass mr-1"></i> Guía
+        </button>
+        <button onclick="switchTab('settings')" id="tab-settings" class="text-xs font-bold px-3 py-1.5 rounded-lg text-slate-300 hover:text-white">
+          <i class="fa-solid fa-sliders mr-1"></i> Entorno
+        </button>
+      </div>
+
+      <!-- Tab Content: Info -->
+      <div id="content-info" class="space-y-3">
+        <h2 id="point-title" class="font-cinzel text-xl font-bold text-amber-400">
+          Pirámide Principal B1-1
+        </h2>
+        <p id="point-subtitle" class="text-xs text-amber-200 font-semibold uppercase tracking-wider">
+          Estructura Ceremonial Mayor
+        </p>
+        <div class="h-0.5 w-full bg-gradient-to-r from-amber-500 to-transparent my-2"></div>
+        <p id="point-desc" class="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
+          La pirámide B1-1 es la construcción monumental principal del Tazumal. Presenta arquitectura maya con influencias de estilo *talud-tablero*, múltiples escalinatas, alfardas y templos superpuestos construidos en el período Clásico (250–900 d.C.).
+        </p>
+        <div id="point-stats" class="grid grid-cols-2 gap-2 pt-2 text-xs">
+          <div class="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+            <span class="text-slate-400 block text-[10px] uppercase tracking-wider">Período</span>
+            <span class="text-amber-300 font-bold" id="stat-period">Clásico (250-900 d.C.)</span>
+          </div>
+          <div class="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+            <span class="text-slate-400 block text-[10px] uppercase tracking-wider">Material</span>
+            <span class="text-amber-300 font-bold" id="stat-material">Basalto y Mezcla de Cal</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content: Guía Turística -->
+      <div id="content-guide" class="hidden space-y-3">
+        <h3 class="font-cinzel text-lg font-bold text-amber-400">Información del Visitante</h3>
+        <ul class="text-xs text-slate-200 space-y-2.5">
+          <li class="flex items-start gap-2 bg-slate-800/40 p-2 rounded-lg border border-slate-700/50">
+            <i class="fa-solid fa-clock text-amber-400 mt-0.5 text-sm"></i>
+            <span><strong>Horario:</strong> Martes a Domingo de 9:00 AM a 4:00 PM.</span>
+          </li>
+          <li class="flex items-start gap-2 bg-slate-800/40 p-2 rounded-lg border border-slate-700/50">
+            <i class="fa-solid fa-ticket text-amber-400 mt-0.5 text-sm"></i>
+            <span><strong>Boletos:</strong> Nacionales $1.00 USD / Extranjeros $5.00 USD.</span>
+          </li>
+          <li class="flex items-start gap-2 bg-slate-800/40 p-2 rounded-lg border border-slate-700/50">
+            <i class="fa-solid fa-location-dot text-amber-400 mt-0.5 text-sm"></i>
+            <span><strong>Dirección:</strong> Calle al Tazumal, Municipio de Chalchuapa, Santa Ana, El Salvador.</span>
+          </li>
+          <li class="flex items-start gap-2 bg-slate-800/40 p-2 rounded-lg border border-slate-700/50">
+            <i class="fa-solid fa-landmark text-amber-400 mt-0.5 text-sm"></i>
+            <span><strong>Museo Stanley Boggs:</strong> Alberga valiosas piezas recuperadas como la estatua de Xipe Tótec y vasijas plomizas.</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Tab Content: Settings -->
+      <div id="content-settings" class="hidden space-y-4">
+        <h3 class="font-cinzel text-lg font-bold text-amber-400">Controles de Iluminación</h3>
+        <div>
+          <label class="text-xs text-slate-200 block mb-2 font-semibold">Momento del Día</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="setLighting('day')" class="glass-button p-2 rounded-xl text-xs flex flex-col items-center gap-1 text-amber-300 font-bold">
+              <i class="fa-solid fa-sun text-base"></i> Día Radiante
+            </button>
+            <button onclick="setLighting('sunset')" class="glass-button p-2 rounded-xl text-xs flex flex-col items-center gap-1 text-orange-400 font-bold">
+              <i class="fa-solid fa-cloud-sun text-base"></i> Atardecer
+            </button>
+            <button onclick="setLighting('night')" class="glass-button p-2 rounded-xl text-xs flex flex-col items-center gap-1 text-indigo-300 font-bold">
+              <i class="fa-solid fa-moon text-base"></i> Noche
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-200 block mb-2 font-semibold">Iluminación Interna & Antorchas</label>
+          <button id="torch-toggle" onclick="toggleTorches()" class="w-full glass-button p-2.5 rounded-xl text-xs text-amber-300 flex items-center justify-between font-bold">
+            <span><i class="fa-solid fa-fire mr-2 text-amber-500"></i> Luces de Exhibición / Antorchas</span>
+            <span id="torch-status" class="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/40">ENCENDIDAS</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Navigation Bar & Minimap -->
+    <div class="flex flex-col md:flex-row items-center justify-between gap-4 pointer-events-auto w-full">
+      
+      <!-- Camera Viewpoints Bar -->
+      <div class="glass-panel p-2 rounded-2xl flex flex-wrap justify-center gap-2 max-w-full overflow-x-auto border-amber-500/40">
+        <button onclick="setView('general', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200 active">
+          <i class="fa-solid fa-globe mr-1.5 text-amber-400"></i> Vista Aérea
+        </button>
+        <button onclick="setView('entrance', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200">
+          <i class="fa-solid fa-door-open mr-1.5 text-amber-400"></i> Entrada Principal
+        </button>
+        <button onclick="setView('museum_ext', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200">
+          <i class="fa-solid fa-building-columns mr-1.5 text-amber-400"></i> Museo Exterior
+        </button>
+        <button onclick="setView('museum_int', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200">
+          <i class="fa-solid fa-eye mr-1.5 text-amber-400"></i> Interior Museo
+        </button>
+        <button onclick="setView('pyramid', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200">
+          <i class="fa-solid fa-pyramid mr-1.5 text-amber-400"></i> Pirámide B1-1
+        </button>
+        <button onclick="setView('structure2', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200">
+          <i class="fa-solid fa-cubes mr-1.5 text-amber-400"></i> Estructura B1-2
+        </button>
+        <button onclick="setView('stela', this)" class="nav-btn glass-button px-3.5 py-2 rounded-xl text-xs font-bold text-slate-200">
+          <i class="fa-solid fa-monument mr-1.5 text-amber-400"></i> Estela de Basalto
+        </button>
+      </div>
+
+      <!-- Minimap Container -->
+      <div class="hidden lg:flex items-center gap-3 glass-panel p-2.5 rounded-2xl border-amber-500/40">
+        <canvas id="minimap" width="80" height="80"></canvas>
+        <div class="text-[10px] text-slate-300 pr-2">
+          <span class="block text-amber-400 font-bold uppercase tracking-wider">MAPA DEL SITIO</span>
+          <span>S.A. Tazumal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- External 3D Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    // --- 1. CONFIGURACIÓN DE ESCENA Y RENDERIZADOR ---
+    const container = document.getElementById('webgl-container');
+    const scene = new THREE.Scene();
+    
+    // Colores y configuración de iluminación radiante y brillante
+    const skyColors = {
+      day: { bg: 0x38bdf8, fog: 0x7dd3fc, light: 0xfffdf0, intensity: 1.8, ambient: 0x64748b, ambInt: 0.85 },
+      sunset: { bg: 0xea580c, fog: 0xf97316, light: 0xffedd5, intensity: 1.4, ambient: 0x7c2d12, ambInt: 0.75 },
+      night: { bg: 0x090d16, fog: 0x1e293b, light: 0x38bdf8, intensity: 0.35, ambient: 0x1e1b4b, ambInt: 0.4 }
+    };
+
+    scene.background = new THREE.Color(skyColors.day.bg);
+    scene.fog = new THREE.FogExp2(skyColors.day.fog, 0.005);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25; // Brillo vivo para evitar aspecto opaco
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.01;
+    controls.minDistance = 2;
+    controls.maxDistance = 140;
+
+    // --- 2. ILUMINACIÓN SOLAR Y LUCES INTERNAS ---
+    const ambientLight = new THREE.AmbientLight(skyColors.day.ambient, skyColors.day.ambInt);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(skyColors.day.light, skyColors.day.intensity);
+    sunLight.position.set(60, 70, 50);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 200;
+    const sDist = 75;
+    sunLight.shadow.camera.left = -sDist;
+    sunLight.shadow.camera.right = sDist;
+    sunLight.shadow.camera.top = sDist;
+    sunLight.shadow.camera.bottom = -sDist;
+    sunLight.shadow.bias = -0.0001;
+    scene.add(sunLight);
+
+    // Luces de exhibición dentro del museo
+    const museumLights = [];
+    function createMuseumLight(x, y, z, color = 0xffe082, intensity = 2.5) {
+      const pLight = new THREE.PointLight(color, intensity, 12);
+      pLight.position.set(x, y, z);
+      pLight.castShadow = true;
+      scene.add(pLight);
+      museumLights.push(pLight);
+
+      // Foco físico visible en el techo
+      const bulbGeo = new THREE.SphereGeometry(0.12, 12, 12);
+      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff59d });
+      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+      bulb.position.set(x, y, z);
+      scene.add(bulb);
+    }
+
+    // --- 3. TEXTURAS PROCEDURALES VIVAS ---
+    // Textura para piedra de basalto clara/cálida
+    function createStoneTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#d6c7b2';
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.strokeStyle = '#a3927d';
+      ctx.lineWidth = 4;
+      const rows = 16; const rowHeight = 512 / rows;
+
+      for (let i = 0; i < rows; i++) {
+        const y = i * rowHeight;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+
+        const cols = 8; const colWidth = 512 / cols;
+        const offset = (i % 2) * (colWidth / 2);
+
+        for (let j = 0; j <= cols + 1; j++) {
+          const x = j * colWidth - offset;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + rowHeight); ctx.stroke();
+        }
+      }
+
+      for (let k = 0; k < 10000; k++) {
+        const rx = Math.random() * 512;
+        const ry = Math.random() * 512;
+        const val = Math.random() * 40;
+        ctx.fillStyle = `rgba(${val+120},${val+100},${val+80},0.15)`;
+        ctx.fillRect(rx, ry, 2, 2);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    const stoneTexture = createStoneTexture();
+    stoneTexture.repeat.set(4, 4);
+
+    const stoneMaterial = new THREE.MeshStandardMaterial({
+      map: stoneTexture,
+      roughness: 0.6,
+      metalness: 0.05
+    });
+
+    const darkStoneMat = new THREE.MeshStandardMaterial({
+      color: 0x8c7a6b,
+      roughness: 0.7
+    });
+
+    // Césped verde brillante y encendido
+    const grassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2e7d32,
+      roughness: 0.55,
+      metalness: 0.05
+    });
+
+    // Sendero blanco ceremonial
+    const sacbeMaterial = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      roughness: 0.8
+    });
+
+    // --- 4. CONSTRUCCIÓN DE MODELOS 3D ---
+
+    // A. Terreno
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(180, 180), grassMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Senderos de Acceso
+    const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(10, 80), sacbeMaterial);
+    mainPath.rotation.x = -Math.PI / 2;
+    mainPath.position.set(0, 0.02, 20);
+    mainPath.receiveShadow = true;
+    scene.add(mainPath);
+
+    const museumPath = new THREE.Mesh(new THREE.PlaneGeometry(32, 8), sacbeMaterial);
+    museumPath.rotation.x = -Math.PI / 2;
+    museumPath.position.set(-22, 0.02, 38);
+    museumPath.receiveShadow = true;
+    scene.add(museumPath);
+
+    // B. ENTRADA PRINCIPAL DETALLADA
+    const entranceGroup = new THREE.Group();
+
+    // Muros perimetrales
+    const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(16, 2.8, 0.8), darkStoneMat);
+    wallLeft.position.set(-13, 1.4, 58);
+    wallLeft.castShadow = true;
+
+    const wallRight = new THREE.Mesh(new THREE.BoxGeometry(16, 2.8, 0.8), darkStoneMat);
+    wallRight.position.set(13, 1.4, 58);
+    wallRight.castShadow = true;
+
+    // Pilastras del arco
+    const pillar1 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 4.2, 1.6), stoneMaterial);
+    pillar1.position.set(-4.2, 2.1, 58);
+    pillar1.castShadow = true;
+
+    const pillar2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 4.2, 1.6), stoneMaterial);
+    pillar2.position.set(4.2, 2.1, 58);
+    pillar2.castShadow = true;
+
+    // Portón con verja metálica
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.2 });
+    for (let x = -3.2; x <= 3.2; x += 0.8) {
+      if (Math.abs(x) < 0.2) continue;
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.2), metalMat);
+      bar.position.set(x, 1.6, 58);
+      entranceGroup.add(bar);
+    }
+
+    // Caseta de Control / Taquilla
+    const boothBody = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.8, 3.5), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 }));
+    boothBody.position.set(8, 1.4, 55.5);
+    boothBody.castShadow = true;
+
+    const boothRoof = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.4, 4.2), new THREE.MeshStandardMaterial({ color: 0xb45309 }));
+    boothRoof.position.set(8, 3.0, 55.5);
+
+    // Letrero Oficial
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 512; signCanvas.height = 128;
+    const sCtx = signCanvas.getContext('2d');
+    sCtx.fillStyle = '#0f172a'; sCtx.fillRect(0, 0, 512, 128);
+    sCtx.fillStyle = '#f59e0b'; sCtx.font = 'bold 26px sans-serif'; sCtx.textAlign = 'center';
+    sCtx.fillText('PARQUE ARQUEOLÓGICO TAZUMAL', 256, 48);
+    sCtx.fillStyle = '#38bdf8'; sCtx.font = 'bold 18px sans-serif';
+    sCtx.fillText('ENTRADA PRINCIPAL - CHALCHUAPA', 256, 88);
+
+    const signBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(6.5, 1.4, 0.2),
+      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(signCanvas) })
+    );
+    signBoard.position.set(0, 4.2, 58);
+    signBoard.castShadow = true;
+
+    entranceGroup.add(wallLeft, wallRight, pillar1, pillar2, boothBody, boothRoof, signBoard);
+    scene.add(entranceGroup);
+
+    // C. MUSEO DE SITIO STANLEY H. BOGGS (CON INTERIOR DETALLADO)
+    const museumGroup = new THREE.Group();
+    const museumWalls = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.3, side: THREE.DoubleSide });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.3, roughness: 0.1 });
+    const floorTileMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.4 });
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8, roughness: 0.2 });
+    const jadeMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.2, metalness: 0.1 });
+    const clayMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 });
+
+    // Estructura exterior e interior
+    const mWidth = 18, mHeight = 4.5, mDepth = 12;
+    const mFloor = new THREE.Mesh(new THREE.PlaneGeometry(mWidth - 0.4, mDepth - 0.4), floorTileMat);
+    mFloor.rotation.x = -Math.PI / 2;
+    mFloor.position.set(0, 0.05, 0);
+
+    const mRoof = new THREE.Mesh(new THREE.BoxGeometry(mWidth + 1, 0.4, mDepth + 1), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+    mRoof.position.set(0, mHeight + 0.2, 0);
+
+    // Ventanales transparentes al frente para ver adentro desde afuera
+    const glassFront = new THREE.Mesh(new THREE.PlaneGeometry(14, 3.5), glassMat);
+    glassFront.position.set(0, 2.2, mDepth / 2);
+
+    // Pared trasera y laterales
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(mWidth, mHeight, 0.4), museumWalls);
+    backWall.position.set(0, mHeight / 2, -mDepth / 2);
+
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, mHeight, mDepth), museumWalls);
+    leftWall.position.set(-mWidth / 2, mHeight / 2, 0);
+
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, mHeight, mDepth), museumWalls);
+    rightWall.position.set(mWidth / 2, mHeight / 2, 0);
+
+    museumGroup.add(mFloor, mRoof, glassFront, backWall, leftWall, rightWall);
+
+    // --- EXHIBICIONES INTERNAS DEL MUSEO ---
+    // Vitrina 1: Escultura del Dios Xipe Tótec
+    const stand1 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 2.2), darkStoneMat);
+    stand1.position.set(-4, 0.6, 0);
+    const statue = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 1.8, 12), clayMat);
+    statue.position.set(-4, 2.1, 0);
+
+    // Vitrina 2: Vasija Plomiza de Chalchuapa
+    const stand2 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.2, 1.8), darkStoneMat);
+    stand2.position.set(0, 0.6, -2);
+    const vessel = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), goldMat);
+    vessel.position.set(0, 1.65, -2);
+
+    // Vitrina 3: Piezas de Jade y Artefactos Funerarios
+    const stand3 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 2.2), darkStoneMat);
+    stand3.position.set(4, 0.6, 0);
+    const jadeOrnament = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35), jadeMat);
+    jadeOrnament.position.set(4, 1.6, 0);
+
+    // Cajas de cristal de exhibición
+    [stand1, stand2, stand3].forEach(st => {
+      const gBox = new THREE.Mesh(new THREE.BoxGeometry(st.geometry.parameters.width, 1.4, st.geometry.parameters.depth), glassMat);
+      gBox.position.set(st.position.x, st.position.y + 1.3, st.position.z);
+      museumGroup.add(gBox);
+    });
+
+    museumGroup.add(stand1, statue, stand2, vessel, stand3, jadeOrnament);
+    museumGroup.position.set(-26, 0, 38);
+    scene.add(museumGroup);
+
+    // Luces focalizadas del interior del museo
+    createMuseumLight(-30, 3.8, 38, 0xffd54f, 3.0);
+    createMuseumLight(-26, 3.8, 36, 0x64b5f6, 2.5);
+    createMuseumLight(-22, 3.8, 38, 0x81c784, 2.5);
+
+    // D. PIRÁMIDE PRINCIPAL B1-1
+    const pyramidGroup = new THREE.Group();
+
+    // Niveles Escalonados Estilo Talud-Tablero
+    const pyramidLevels = [
+      { w: 34, h: 3.0, d: 34, y: 1.5 },
+      { w: 28, h: 2.8, d: 28, y: 4.4 },
+      { w: 22, h: 2.6, d: 22, y: 7.1 },
+      { w: 16, h: 2.4, d: 16, y: 9.6 },
+      { w: 11, h: 2.2, d: 11, y: 11.9 }
+    ];
+
+    pyramidLevels.forEach((lvl) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(lvl.w, lvl.h, lvl.d), stoneMaterial);
+      mesh.position.y = lvl.y;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      pyramidGroup.add(mesh);
+
+      // Moldura del tablero
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(lvl.w + 0.8, 0.45, lvl.d + 0.8), darkStoneMat);
+      rim.position.y = lvl.y + lvl.h / 2 - 0.22;
+      rim.castShadow = true;
+      pyramidGroup.add(rim);
+    });
+
+    // Escalinata Principal con Alfardas
+    const stairs = new THREE.Mesh(new THREE.BoxGeometry(9, 13.5, 17), stoneMaterial);
+    stairs.position.set(0, 6.0, 10);
+    stairs.rotation.x = -Math.PI / 5.2;
+    stairs.castShadow = true;
+    stairs.receiveShadow = true;
+    pyramidGroup.add(stairs);
+
+    // Alfardas Laterales
+    [-4.8, 4.8].forEach(xOffset => {
+      const alfarda = new THREE.Mesh(new THREE.BoxGeometry(0.9, 14, 17.5), darkStoneMat);
+      alfarda.position.set(xOffset, 6.0, 10);
+      alfarda.rotation.x = -Math.PI / 5.2;
+      alfarda.castShadow = true;
+      pyramidGroup.add(alfarda);
+    });
+
+    // Santuario Superior
+    const templeBody = new THREE.Mesh(new THREE.BoxGeometry(7.5, 2.8, 6.5), stoneMaterial);
+    templeBody.position.set(0, 14.4, -1);
+    templeBody.castShadow = true;
+    pyramidGroup.add(templeBody);
+
+    // Columnas ceremoniales
+    [-2.2, 2.2].forEach(x => {
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 2.5, 12), darkStoneMat);
+      col.position.set(x, 14.25, 2.2);
+      col.castShadow = true;
+      pyramidGroup.add(col);
+    });
+
+    const templeRoof = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.7, 7.8), darkStoneMat);
+    templeRoof.position.set(0, 16.1, -0.8);
+    templeRoof.castShadow = true;
+    pyramidGroup.add(templeRoof);
+
+    pyramidGroup.position.set(0, 0, -6);
+    scene.add(pyramidGroup);
+
+    // E. ESTRUCTURA B1-2 (Plataforma Ceremonial Adyacente)
+    const struct2Group = new THREE.Group();
+    const struct2Base = new THREE.Mesh(new THREE.BoxGeometry(15, 3.2, 11), stoneMaterial);
+    struct2Base.position.y = 1.6;
+    struct2Base.castShadow = true;
+
+    const struct2Stairs = new THREE.Mesh(new THREE.BoxGeometry(4.5, 4.0, 6), stoneMaterial);
+    struct2Stairs.position.set(0, 1.6, 5.5);
+    struct2Stairs.rotation.x = -Math.PI / 6;
+    struct2Stairs.castShadow = true;
+
+    struct2Group.add(struct2Base, struct2Stairs);
+    struct2Group.position.set(-30, 0, 2);
+    scene.add(struct2Group);
+
+    // F. ESTELA MONOLÍTICA DE BASALTO
+    const stelaGroup = new THREE.Group();
+    const stelaGeo = new THREE.BoxGeometry(1.0, 3.2, 0.45);
+
+    const stelaCanvas = document.createElement('canvas');
+    stelaCanvas.width = 128; stelaCanvas.height = 256;
+    const stCtx = stelaCanvas.getContext('2d');
+    stCtx.fillStyle = '#786c5c'; stCtx.fillRect(0, 0, 128, 256);
+    stCtx.strokeStyle = '#3a3125'; stCtx.lineWidth = 4;
+    for (let i = 0; i < 8; i++) {
+      stCtx.strokeRect(16, 18 + i * 28, 96, 22);
+      stCtx.beginPath(); stCtx.arc(40, 29 + i * 28, 5, 0, Math.PI * 2); stCtx.stroke();
+    }
+    const stelaMat = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(stelaCanvas), roughness: 0.8 });
+
+    const stelaMesh = new THREE.Mesh(stelaGeo, stelaMat);
+    stelaMesh.position.y = 1.6;
+    stelaMesh.castShadow = true;
+
+    const stelaBase = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 1.4), darkStoneMat);
+    stelaBase.position.y = 0.2;
+
+    stelaGroup.add(stelaMesh, stelaBase);
+    stelaGroup.position.set(7, 0, 12);
+    scene.add(stelaGroup);
+
+    // G. ÁRBOLES DE CEIBA
+    function createCeibaTree(x, z) {
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.7, 1.1, 6, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.9 })
+      );
+      trunk.position.y = 3;
+      trunk.castShadow = true;
+
+      const foliageMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.6 });
+      const crown1 = new THREE.Mesh(new THREE.SphereGeometry(3.5, 8, 8), foliageMat);
+      crown1.position.y = 6.8;
+      crown1.scale.set(1.3, 0.7, 1.3);
+      crown1.castShadow = true;
+
+      const crown2 = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), foliageMat);
+      crown2.position.set(1.4, 8.2, 0);
+      crown2.castShadow = true;
+
+      tree.add(trunk, crown1, crown2);
+      tree.position.set(x, 0, z);
+      scene.add(tree);
+    }
+
+    const treeCoords = [
+      [-42, -22], [42, -22], [-48, 18], [45, 20],
+      [-18, -32], [22, -35], [40, 48], [-45, 52]
+    ];
+    treeCoords.forEach(c => createCeibaTree(c[0], c[1]));
+
+    // --- 5. VISTAS DE CÁMARA E INFORMACIÓN HISTÓRICA ---
+    const cameraViews = {
+      general:     { cam: { x: 0, y: 38, z: 72 },   look: { x: 0, y: 4, z: 5 } },
+      entrance:    { cam: { x: 0, y: 4.5, z: 72 }, look: { x: 0, y: 2.5, z: 52 } },
+      museum_ext:  { cam: { x: -26, y: 4.5, z: 52 }, look: { x: -26, y: 2.2, z: 38 } },
+      museum_int:  { cam: { x: -26, y: 2.2, z: 43 }, look: { x: -26, y: 1.8, z: 36 } },
+      pyramid:     { cam: { x: 0, y: 14, z: 30 },   look: { x: 0, y: 8, z: -6 } },
+      structure2:  { cam: { x: -30, y: 7, z: 18 },  look: { x: -30, y: 2, z: 2 } },
+      stela:       { cam: { x: 7, y: 2.5, z: 18 },  look: { x: 7, y: 1.8, z: 12 } }
+    };
+
+    const pointInformation = {
+      general: {
+        title: "VISTA AÉREA GENERAL",
+        subtitle: "Complejo Arqueológico Tazumal",
+        desc: "Ubicado en el municipio de Chalchuapa, El Salvador. Tazumal es un asentamiento precolombino habitado continuamente durante los períodos Clásico y Postclásico Maya/Pipil.",
+        period: "250 – 1200 d.C.", material: "Centro Urbano Ceremonial"
+      },
+      entrance: {
+        title: "ENTRADA PRINCIPAL",
+        subtitle: "Acceso Oficial y Control",
+        desc: "Punto de recepción del parque, equipado con portón de protección, caseta de boletos e información turística para visitantes locales e internacionales.",
+        period: "Parque Arqueológico", material: "Instalación de Control"
+      },
+      museum_ext: {
+        title: "MUSEO STANLEY H. BOGGS (EXTERIOR)",
+        subtitle: "Centro de Interpretación",
+        desc: "Edificio moderno de resguardo que rinde homenaje a Stanley Boggs, pionero de la arqueología salvadoreña. Sus ventanales permiten observar las piezas expuestas.",
+        period: "Fundado en 1952", material: "Arquitectura Institucional"
+      },
+      museum_int: {
+        title: "INTERIOR DEL MUSEO",
+        subtitle: "Colección Arqueológica",
+        desc: "Exposición focalizada con vitrinas que albergan la célebre estatua del dios Xipe Tótec, vasijas cerámicas de estilo Plumbate, ornamentos de jade e instrumentos de obsidiana.",
+        period: "Colección Clásica", material: "Cerámica, Jade y Piedra"
+      },
+      pyramid: {
+        title: "PIRÁMIDE PRINCIPAL B1-1",
+        subtitle: "Estructura Ceremonial Mayor",
+        desc: "Estructura piramidal de 24 metros de altura con estilo talud-tablero. Cuenta con escalinatas flanqueadas por alfardas y templos superpuestos construidos progresivamente.",
+        period: "Clásico (250–900 d.C.)", material: "Basalto, Barro y Cal"
+      },
+      structure2: {
+        title: "ESTRUCTURA B1-2",
+        subtitle: "Plataforma Ceremonial Secundaría",
+        desc: "Montículo ceremonial ubicado al oeste de la pirámide principal. Utilizado para ritos comunitarios, observaciones del calendario agrícola e intercambios sociales.",
+        period: "Clásico Medio", material: "Plataforma Escalonada"
+      },
+      stela: {
+        title: "ESTELA DE TAZUMAL",
+        subtitle: "Monolito Esculpido de Basalto",
+        desc: "Gran losa de piedra que representa a un alto gobernante o sacerdote maya vistiendo atavíos ceremoniales y sosteniendo un cetro sagrado de mando.",
+        period: "Clásico Tardío", material: "Grabadura en Basalto"
+      }
+    };
+
+    let targetCamPos = { ...cameraViews.general.cam };
+    let targetLookPos = { ...cameraViews.general.look };
+
+    camera.position.set(targetCamPos.x, targetCamPos.y, targetCamPos.z);
+    controls.target.set(targetLookPos.x, targetLookPos.y, targetLookPos.z);
+
+    // --- 6. INTERACCIÓN Y NAVEGACIÓN ---
+    function setView(viewKey, btn) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      const target = cameraViews[viewKey];
+      const info = pointInformation[viewKey];
+
+      targetCamPos = target.cam;
+      targetLookPos = target.look;
+
+      document.getElementById('point-title').innerText = info.title;
+      document.getElementById('point-subtitle').innerText = info.subtitle;
+      document.getElementById('point-desc').innerText = info.desc;
+      document.getElementById('stat-period').innerText = info.period;
+      document.getElementById('stat-material').innerText = info.material;
+
+      switchTab('info');
+    }
+
+    function switchTab(tabName) {
+      ['info', 'guide', 'settings'].forEach(t => {
+        document.getElementById(`content-${t}`).classList.add('hidden');
+        const tabBtn = document.getElementById(`tab-${t}`);
+        tabBtn.classList.remove('bg-amber-500/20', 'text-amber-400', 'border', 'border-amber-500/40');
+        tabBtn.classList.add('text-slate-300');
+      });
+
+      document.getElementById(`content-${tabName}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-${tabName}`);
+      activeBtn.classList.add('bg-amber-500/20', 'text-amber-400', 'border', 'border-amber-500/40');
+      activeBtn.classList.remove('text-slate-300');
+    }
+
+    // --- 7. CONTROL DE ILUMINACIÓN Y ENTORNO ---
+    function setLighting(mode) {
+      const theme = skyColors[mode];
+      scene.background.setHex(theme.bg);
+      scene.fog.color.setHex(theme.fog);
+      ambientLight.color.setHex(theme.ambient);
+      ambientLight.intensity = theme.ambInt;
+      sunLight.color.setHex(theme.light);
+      sunLight.intensity = theme.intensity;
+
+      const badge = document.getElementById('time-badge');
+      if (mode === 'day') {
+        badge.innerHTML = `<i class="fa-solid fa-sun text-amber-400"></i> Día Radiante`;
+      } else if (mode === 'sunset') {
+        badge.innerHTML = `<i class="fa-solid fa-cloud-sun text-orange-400"></i> Atardecer`;
+      } else {
+        badge.innerHTML = `<i class="fa-solid fa-moon text-indigo-300"></i> Noche Arqueológica`;
+      }
+    }
+
+    let torchesActive = true;
+    function toggleTorches() {
+      torchesActive = !torchesActive;
+      museumLights.forEach(l => l.visible = torchesActive);
+      document.getElementById('torch-status').innerText = torchesActive ? 'ENCENDIDAS' : 'APAGADAS';
+    }
+
+    // --- 8. AUDIO AMBIENTAL SINTÉTICO (Web Audio API) ---
+    let audioCtx = null;
+    let isPlayingAudio = false;
+
+    function toggleAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      const icon = document.getElementById('audio-icon');
+      if (isPlayingAudio) {
+        audioCtx.suspend();
+        isPlayingAudio = false;
+        icon.className = "fa-solid fa-volume-xmark";
+      } else {
+        audioCtx.resume();
+        playAmbientSound();
+        isPlayingAudio = true;
+        icon.className = "fa-solid fa-volume-high text-amber-400";
+      }
+    }
+
+    function playAmbientSound() {
+      const bufferSize = audioCtx.sampleRate * 2;
+      const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+
+      const whiteNoise = audioCtx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+      whiteNoise.loop = true;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 350;
+
+      const gain = audioCtx.createGain();
+      gain.gain.value = 0.04;
+
+      whiteNoise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      whiteNoise.start();
+    }
+
+    // --- 9. TOUR GUIADO AUTOMÁTICO ---
+    let tourActive = false;
+    let tourStep = 0;
+    const tourSequence = ['general', 'entrance', 'museum_ext', 'museum_int', 'pyramid', 'stela', 'structure2'];
+    let tourInterval = null;
+
+    function toggleTour() {
+      tourActive = !tourActive;
+      const btn = document.getElementById('tour-btn');
+
+      if (tourActive) {
+        btn.classList.add('active');
+        tourStep = 0;
+        runTourStep();
+        tourInterval = setInterval(runTourStep, 7500);
+      } else {
+        btn.classList.remove('active');
+        clearInterval(tourInterval);
+      }
+    }
+
+    function runTourStep() {
+      const key = tourSequence[tourStep];
+      const navButtons = document.querySelectorAll('.nav-btn');
+      setView(key, navButtons[tourStep]);
+      tourStep = (tourStep + 1) % tourSequence.length;
+    }
+
+    // --- 10. MINIMAPA 2D ---
+    const minimapCanvas = document.getElementById('minimap');
+    const miniCtx = minimapCanvas.getContext('2d');
+
+    function updateMinimap() {
+      miniCtx.clearRect(0, 0, 80, 80);
+
+      miniCtx.fillStyle = '#1e293b';
+      miniCtx.fillRect(0, 0, 80, 80);
+
+      // Pirámide principal
+      miniCtx.fillStyle = '#f59e0b';
+      miniCtx.fillRect(32, 28, 16, 16);
+
+      // Estructura B1-2
+      miniCtx.fillStyle = '#94a3b8';
+      miniCtx.fillRect(14, 32, 8, 8);
+
+      // Museo
+      miniCtx.fillStyle = '#38bdf8';
+      miniCtx.fillRect(14, 55, 12, 6);
+
+      // Posición de la Cámara
+      const cx = 40 + (camera.position.x / 180) * 80;
+      const cz = 40 + (camera.position.z / 180) * 80;
+
+      miniCtx.fillStyle = '#ef4444';
+      miniCtx.beginPath();
+      miniCtx.arc(cx, cz, 3.5, 0, Math.PI * 2);
+      miniCtx.fill();
+    }
+
+    // --- 11. BUCLE DE ANIMACIÓN Y RENDERIZADO ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Movimiento suave e interpolado de cámara
+      camera.position.x += (targetCamPos.x - camera.position.x) * 0.04;
+      camera.position.y += (targetCamPos.y - camera.position.y) * 0.04;
+      camera.position.z += (targetCamPos.z - camera.position.z) * 0.04;
+
+      controls.target.x += (targetLookPos.x - controls.target.x) * 0.04;
+      controls.target.y += (targetLookPos.y - controls.target.y) * 0.04;
+      controls.target.z += (targetLookPos.z - controls.target.z) * 0.04;
+
+      controls.update();
+      renderer.render(scene, camera);
+      updateMinimap();
+    }
+
+    window.onload = function() {
+      animate();
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
